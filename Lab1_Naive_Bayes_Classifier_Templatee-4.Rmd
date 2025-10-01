@@ -182,10 +182,9 @@ tidy_test <- test %>%
   filter(!str_detect(word, "^\\d+$"))
 
 bow_train_wide <- tidy_train %>% count(doc_id, word) %>% pivot_wider(names_from = word, values_from = n, values_fill = 0)
-dtm_train      <- tidy_train %>% count(doc_id, word) %>% cast_dtm(document = doc_id, term = word, value = n)
 
 bow_test_wide  <- tidy_test  %>% count(doc_id, word) %>% pivot_wider(names_from = word, values_from = n, values_fill = 0)
-dtm_test       <- tidy_test  %>% count(doc_id, word) %>% cast_dtm(document = doc_id, term = word, value = n)
+
 
 ```
 
