@@ -379,7 +379,11 @@ model = naiveBayes()
 model$fit()
 model$predict("not thus he appeared assuredly not thus in the vivacity of his waking hours 
 ")
-
+results <- model$score(test, test$author)
+print("Confusion Matrix:")
+print(results$confusion_matrix)
+cat(sprintf("\nAccuracy: %.4f\n", results$accuracy))
+cat(sprintf("Macro F1 Score: %.4f\n", results$macro_f1))
 ```
 
 ## Measure effectiveness of your classifier
