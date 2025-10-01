@@ -255,10 +255,7 @@ naiveBayes <- setRefClass("naiveBayes",
                     
                       rownames(C) <- classes
                       colnames(C) <- vocab
-                      
-                      #Z <- stats::model.matrix(~ y - 1)              # docs × classes (one-hot)
-                      #C <- t(Z) %*% Xmat                             # K × V
-                      #rownames(C) <- classes; colnames(C) <- vocab
+
                       
   
                       Nc <- rowSums(C)
@@ -289,8 +286,7 @@ naiveBayes <- setRefClass("naiveBayes",
                           # nothing usable -> fallback to priors
                           scores <- .self$prior
                           pred   <- .self$classes[which.max(scores)]
-                          return(list(class = pred, posterior = scores / sum(scores),
-                                      used_terms = character(0), used_counts = integer(0)))
+                          return (pred)
                         }
                         counts <- as.numeric(cnt[terms])        # exponents; same order as 'terms'
                       
@@ -300,7 +296,7 @@ naiveBayes <- setRefClass("naiveBayes",
                         contrib <- sweep(P, 2, counts, `^`)             # raise each column by its count
                         scores  <- .self$prior * apply(contrib, 1, prod)
                         pred <- .self$classes[which.max(scores)]
-                       
+                        return (pred)
                       }
                       else{
                         print("Use fit function first")
@@ -314,13 +310,14 @@ naiveBayes <- setRefClass("naiveBayes",
                     # try how well your model generalizes to real world data! 
                     score = function(X_test, y_test)
                     {
-                         # TODO
+                      
                     }
 ))
 
 model = naiveBayes()
 model$fit()
-model$predict("I became insane, with long intervals of horrible horrible sanity.")
+model$predict("not thus he appeared assuredly not thus in the vivacity of his waking hours 
+")
 
 ```
 
