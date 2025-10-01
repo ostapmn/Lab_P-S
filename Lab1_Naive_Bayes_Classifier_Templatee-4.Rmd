@@ -100,6 +100,10 @@ library(tidytext)
 library(readr)
 library(dplyr)
 library(ggplot2)
+library(stringr)
+library(tidyr)
+library(tm)
+
 ```
 
 ## Outline of the work
@@ -156,8 +160,33 @@ splitted_stop_words <- splitted_stop_words[[1]]
 ```
 
 ```{r}
+
 train <-  read.csv(file = train_path, stringsAsFactors = FALSE)
 test <-  read.csv(file = test_path, stringsAsFactors = FALSE)
+
+train <- train %>% mutate(text = as.character(text), doc_id = row_number())
+test  <- test  %>% mutate(text = as.character(text),  doc_id = row_number())
+
+
+train <- train %>% mutate(text = str_replace_all(text, "[[:punct:]]+", " "), text = str_to_lower(text))
+test  <- test  %>% mutate(text = str_replace_all(text, "[[:punct:]]+", " "), text = str_to_lower(text))
+
+tidy_train <- train %>%
+  unnest_tokens(word, text, token = "words") %>%
+  filter(!word %in% splitted_stop_words) %>%
+  filter(!str_detect(word, "^\\d+$"))
+
+tidy_test <- test %>%
+  unnest_tokens(word, text, token = "words") %>%
+  filter(!word %in% splitted_stop_words) %>%
+  filter(!str_detect(word, "^\\d+$"))
+
+bow_train_wide <- tidy_train %>% count(doc_id, word) %>% pivot_wider(names_from = word, values_from = n, values_fill = 0)
+dtm_train      <- tidy_train %>% count(doc_id, word) %>% cast_dtm(document = doc_id, term = word, value = n)
+
+bow_test_wide  <- tidy_test  %>% count(doc_id, word) %>% pivot_wider(names_from = word, values_from = n, values_fill = 0)
+dtm_test       <- tidy_test  %>% count(doc_id, word) %>% cast_dtm(document = doc_id, term = word, value = n)
+
 ```
 
 ```{r}
@@ -182,20 +211,100 @@ naiveBayes <- setRefClass("naiveBayes",
                           
        # here it would be wise to have some vars to store intermediate result
        # frequency dict etc. Though pay attention to bag of words! 
-       fields = list(),
+       fields = list(
+         classes      = "character",
+         vocab        = "character",
+         prior        = "numeric",
+         condprob     = "matrix",
+         fitted       = "logical"
+         ),
        methods = list(
                     # prepare your training data as X - bag of words for each of your
                     # messages and corresponding label for the message encoded as 0 or 1 
                     # (binary classification task)
                     fit = function(X, y)
                     {
-                         # TODO
+                      bow_full <- train %>% 
+                      select(doc_id) %>% distinct() %>%               
+                      left_join(bow_train_wide, by = "doc_id") %>%
+                      mutate(across(-doc_id, ~ tidyr::replace_na(.x, 0))) %>%
+                      arrange(doc_id)
+
+                      X <- bow_full %>% select(-doc_id) # bow without doc_id column
+                      y <- train %>% arrange(doc_id) %>% pull(author) %>% factor() # classes
+                      tokens <- rowSums(as.matrix(X))
+                      
+                
+
+                      .self$classes <- levels(y)
+                      V <- ncol(X) # number of words
+          
+                      
+                      tab <- table(y) #frequencies of all author in messages
+                      prior_vec <- as.numeric(tab) / sum(tab) # number of author's messages/all messages (13705) as.numeric takes only numeric values of vector
+                      names(prior_vec) <- names(tab) # restores names in vector
+                      .self$prior <- prior_vec
+                      
+            
+                      Xmat <- as.matrix(X)   
+        
+                      .self$vocab   <- colnames(Xmat) # words
+                      
+                      C <- sapply(classes, function(c) colSums(Xmat[y == c, , drop = FALSE])) #words x authors
+                      C <- t(C)      #transpose matrix ("rotate") authors x words
+                    
+                      rownames(C) <- classes
+                      colnames(C) <- vocab
+                      
+                      #Z <- stats::model.matrix(~ y - 1)              # docs × classes (one-hot)
+                      #C <- t(Z) %*% Xmat                             # K × V
+                      #rownames(C) <- classes; colnames(C) <- vocab
+                      
+  
+                      Nc <- rowSums(C)
+                      
+       
+                      condprob_mat <- sweep(C + 1, 1, Nc + V, "/")
+                      .self$condprob <- condprob_mat
+                      .self$fitted <- TRUE
+                   
                     },
                     
                     # return prediction for a single message 
                     predict = function(message)
                     {
-                         # TODO
+                      if (isTRUE(fitted)){
+                        msg <- as.character(message)
+                        msg <- gsub("[[:punct:]]+", " ", msg)   # remove punctuation
+                        msg <- tolower(msg)                      # lowercase
+                        toks <- unlist(strsplit(msg, "\\s+"))    # split on spaces
+                        toks <- toks[nchar(toks) > 0]            # drop empties
+                        toks <- toks[!(toks %in% splitted_stop_words)]   # remove stopwords
+                        toks <- toks[!grepl("^\\d+$", toks)]   # drop pure numbers
+                        cnt <- table(toks)                      # e.g., king=3, palace=1, ...
+
+                        # 2) restrict to training vocab
+                        terms <- intersect(names(cnt), .self$vocab)
+                        if (length(terms) == 0) {
+                          # nothing usable -> fallback to priors
+                          scores <- .self$prior
+                          pred   <- .self$classes[which.max(scores)]
+                          return(list(class = pred, posterior = scores / sum(scores),
+                                      used_terms = character(0), used_counts = integer(0)))
+                        }
+                        counts <- as.numeric(cnt[terms])        # exponents; same order as 'terms'
+                      
+                       # 3) class scores: P(c) * Π_t P(t|c)^{count_t}
+                        P <- .self$condprob[, terms, drop = FALSE]      # all authors × used terms)
+                        
+                        contrib <- sweep(P, 2, counts, `^`)             # raise each column by its count
+                        scores  <- .self$prior * apply(contrib, 1, prod)
+                        pred <- .self$classes[which.max(scores)]
+                       
+                      }
+                      else{
+                        print("Use fit function first")
+                      }
                     },
                     
                     # score you test set so to get the understanding how well you model
@@ -211,6 +320,8 @@ naiveBayes <- setRefClass("naiveBayes",
 
 model = naiveBayes()
 model$fit()
+model$predict("I became insane, with long intervals of horrible horrible sanity.")
+
 ```
 
 ## Measure effectiveness of your classifier
