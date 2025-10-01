@@ -296,7 +296,8 @@ naiveBayes <- setRefClass("naiveBayes",
                         contrib <- sweep(P, 2, counts, `^`)             # raise each column by its count
                         scores  <- .self$prior * apply(contrib, 1, prod)
                         pred <- .self$classes[which.max(scores)]
-                        return(list(class = pred, posterior = scores / sum(scores)))
+                        posterior <- round(scores / sum(scores), 4)
+                        return(list(class = pred, posterior = posterior))
                       }
                       else{
                         print("Use fit function first")
@@ -379,7 +380,6 @@ model = naiveBayes()
 model$fit()
 model$predict("not thus he appeared assuredly not thus in the vivacity of his waking hours 
 ")
-results <- model$score(test, test$author)
 print("Confusion Matrix:")
 print(results$confusion_matrix)
 cat(sprintf("\nAccuracy: %.4f\n", results$accuracy))
