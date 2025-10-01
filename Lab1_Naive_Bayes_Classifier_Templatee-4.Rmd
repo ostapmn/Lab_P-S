@@ -296,7 +296,7 @@ naiveBayes <- setRefClass("naiveBayes",
                         contrib <- sweep(P, 2, counts, `^`)             # raise each column by its count
                         scores  <- .self$prior * apply(contrib, 1, prod)
                         pred <- .self$classes[which.max(scores)]
-                        return (pred)
+                        return(list(class = pred, posterior = scores / sum(scores)))
                       }
                       else{
                         print("Use fit function first")
@@ -308,9 +308,70 @@ naiveBayes <- setRefClass("naiveBayes",
                     # look at f1 score or precision and recall
                     # visualize them 
                     # try how well your model generalizes to real world data! 
-                    score = function(X_test, y_test)
+                     score = function(X_test, y_test)
                     {
+                      if (!isTRUE(fitted)){
+                          stop("Use fit function first")
+                        }
+                        
+                        #get predictions for all test messages
+                        n_test <- nrow(X_test)
+                        predictions <- character(n_test)
+                        
+                        for (i in 1:n_test) {
+                          message <- X_test$text[i]
+                          pred_result <- .self$predict(message)
+                          predictions[i] <- pred_result$class
+                        }
+                        
+                        
+                        conf_matrix <- table(Predicted = predictions, Actual = y_test)
                       
+                        n_classes <- length(.self$classes)
+                        metrics <- data.frame(
+                          Class = .self$classes,
+                          Precision = numeric(n_classes),
+                          Recall = numeric(n_classes),
+                          F1_Score = numeric(n_classes)
+                        )
+                        
+                        for (i in seq_along(.self$classes)) {
+                          class <- .self$classes[i]
+                          
+                          #True Positives
+                          TP <- sum(predictions == class & y_test == class)
+                          #False Positives
+                          FP <- sum(predictions == class & y_test != class)
+                          #False Negatives
+                          FN <- sum(predictions != class & y_test == class)
+                          
+                          precision <- ifelse(TP + FP == 0, 0, TP / (TP + FP))
+                          recall <- ifelse(TP + FN == 0, 0, TP / (TP + FN))
+                          f1 <- ifelse(precision + recall == 0, 0, 
+                                       2 * precision * recall / (precision + recall))
+                          
+                          metrics$Precision[i] <- precision
+                          metrics$Recall[i] <- recall
+                          metrics$F1_Score[i] <- f1
+                        }
+                        
+                        accuracy <- sum(predictions == y_test) / length(y_test)
+                        
+                        macro_precision <- mean(metrics$Precision)
+                        macro_recall <- mean(metrics$Recall)
+                        macro_f1 <- mean(metrics$F1_Score)
+                        
+
+                        return(list(
+                          confusion_matrix = conf_matrix,
+                          metrics = metrics,
+                          accuracy = accuracy,
+                          macro_precision = macro_precision,
+                          macro_recall = macro_recall,
+                          macro_f1 = macro_f1,
+                          predictions = predictions,
+                          actual = y_test
+                        ))
                     }
 ))
 
