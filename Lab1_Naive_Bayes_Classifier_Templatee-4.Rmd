@@ -379,6 +379,7 @@ model = naiveBayes()
 model$fit()
 model$predict("not thus he appeared assuredly not thus in the vivacity of his waking hours 
 ")
+results <- model$score(test, test$author)
 print("Confusion Matrix:")
 print(results$confusion_matrix)
 cat(sprintf("\nAccuracy: %.4f\n", results$accuracy))
